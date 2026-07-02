@@ -10,13 +10,23 @@ From a shell with the `knok` build dependencies available:
 cargo run
 ```
 
-The app builds `512x512` fixed-shape graph variants for:
+The app builds `1024x1024` fixed-shape graph variants for:
 
 - Mandelbrot
 - Heat diffusion
 - Wave simulation
 - Conway's Game of Life
 - Particle interaction
+
+## Screenshots
+
+| Mandelbrot | Wave |
+| --- | --- |
+| ![Mandelbrot demo running on Metal](assets/screenshots/mandelbrot-metal.png) | ![Wave simulation running on Metal](assets/screenshots/wave-metal.png) |
+
+| Life | Particles |
+| --- | --- |
+| ![Conway's Game of Life running on Metal](assets/screenshots/life-metal.png) | ![Particle interaction running on Metal](assets/screenshots/particles-metal.png) |
 
 CPU is enabled by default. Optional backend builds:
 

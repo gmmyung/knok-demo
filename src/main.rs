@@ -1,6 +1,5 @@
 use std::time::Instant;
 
-use anyhow::Result;
 use eframe::egui::{
     self, ColorImage, ComboBox, Context, Response, Sense, TextureHandle, TextureOptions,
 };
@@ -9,11 +8,22 @@ use knok::{
     Backend, Engine,
 };
 
-const SIZE: usize = 512;
+const SIZE: usize = 1024;
 const PARTICLES: usize = 256;
 
 type Field = Tensor2<f32, SIZE, SIZE>;
 type ParticleVec = Tensor1<f32, PARTICLES>;
+type AppResult<T> = std::result::Result<T, String>;
+
+trait IntoAppResult<T> {
+    fn into_app_result(self) -> AppResult<T>;
+}
+
+impl<T, E: ToString> IntoAppResult<T> for std::result::Result<T, E> {
+    fn into_app_result(self) -> AppResult<T> {
+        self.map_err(|error| error.to_string())
+    }
+}
 
 knok::generated_graphs!(pub mod cpu_graphs, "knok_cpu_graphs.rs");
 
@@ -314,7 +324,7 @@ impl MandelbrotState {
         self.dirty = true;
     }
 
-    fn grids(&self) -> Result<(Field, Field)> {
+    fn grids(&self) -> AppResult<(Field, Field)> {
         let mut x = Vec::with_capacity(SIZE * SIZE);
         let mut y = Vec::with_capacity(SIZE * SIZE);
         let denom = (SIZE - 1) as f32;
@@ -326,7 +336,10 @@ impl MandelbrotState {
                 y.push(self.center[1] + py * self.scale);
             }
         }
-        Ok((Field::from_vec(x)?, Field::from_vec(y)?))
+        Ok((
+            Field::from_vec(x).into_app_result()?,
+            Field::from_vec(y).into_app_result()?,
+        ))
     }
 }
 
@@ -338,7 +351,7 @@ struct HeatState {
 }
 
 impl HeatState {
-    fn new() -> Result<Self> {
+    fn new() -> Self {
         let mut state = Self {
             field: Field::filled(0.0),
             running: true,
@@ -346,7 +359,7 @@ impl HeatState {
             image: vec![0; SIZE * SIZE * 4],
         };
         state.reset();
-        Ok(state)
+        state
     }
 
     fn reset(&mut self) {
@@ -443,7 +456,7 @@ impl LifeState {
 }
 
 impl ParticleState {
-    fn new() -> Result<Self> {
+    fn new() -> AppResult<Self> {
         let mut state = Self {
             x: ParticleVec::filled(0.0),
             y: ParticleVec::filled(0.0),
@@ -459,7 +472,7 @@ impl ParticleState {
         Ok(state)
     }
 
-    fn reset(&mut self) -> Result<()> {
+    fn reset(&mut self) -> AppResult<()> {
         let mut x = Vec::with_capacity(PARTICLES);
         let mut y = Vec::with_capacity(PARTICLES);
         let mut vx = Vec::with_capacity(PARTICLES);
@@ -476,10 +489,10 @@ impl ParticleState {
             vx.push(-py * 0.18);
             vy.push(px * 0.18);
         }
-        self.x = ParticleVec::from_vec(x)?;
-        self.y = ParticleVec::from_vec(y)?;
-        self.vx = ParticleVec::from_vec(vx)?;
-        self.vy = ParticleVec::from_vec(vy)?;
+        self.x = ParticleVec::from_vec(x).into_app_result()?;
+        self.y = ParticleVec::from_vec(y).into_app_result()?;
+        self.vx = ParticleVec::from_vec(vx).into_app_result()?;
+        self.vy = ParticleVec::from_vec(vy).into_app_result()?;
         self.trail.fill(0.0);
         Ok(())
     }
@@ -524,7 +537,7 @@ impl DemoApp {
             backend: BackendChoice::Cpu,
             engines: EngineCache::new(),
             mandelbrot: MandelbrotState::new(),
-            heat: HeatState::new().expect("initial heat state is valid"),
+            heat: HeatState::new(),
             wave: WaveState::new(),
             life: LifeState::new(),
             particles: ParticleState::new().expect("initial particle state is valid"),
@@ -544,11 +557,11 @@ impl DemoApp {
         };
 
         let graph_start = Instant::now();
-        let result = match self.tab {
+        let result: AppResult<()> = (|| match self.tab {
             Tab::Mandelbrot if self.mandelbrot.dirty => {
                 let (x, y) = self.mandelbrot.grids()?;
-                let output =
-                    run_mandelbrot(self.backend, self.mandelbrot.iterations, engine, x, y)?;
+                let output = run_mandelbrot(self.backend, self.mandelbrot.iterations, engine, x, y)
+                    .into_app_result()?;
                 render_field(
                     output.as_slice(),
                     self.mandelbrot.color_map,
@@ -564,7 +577,8 @@ impl DemoApp {
                     self.heat.preset,
                     engine,
                     self.heat.field.clone(),
-                )?;
+                )
+                .into_app_result()?;
                 render_field(
                     self.heat.field.as_slice(),
                     ColorMap::Fire,
@@ -587,7 +601,8 @@ impl DemoApp {
                     engine,
                     self.wave.height.clone(),
                     self.wave.velocity.clone(),
-                )?;
+                )
+                .into_app_result()?;
                 self.wave.height = height;
                 self.wave.velocity = velocity;
                 render_signed_field(self.wave.height.as_slice(), &mut self.wave.image);
@@ -598,7 +613,8 @@ impl DemoApp {
                 Ok(())
             }
             Tab::Life if self.life.running => {
-                self.life.field = run_life(self.backend, engine, self.life.field.clone())?;
+                self.life.field =
+                    run_life(self.backend, engine, self.life.field.clone()).into_app_result()?;
                 render_life(self.life.field.as_slice(), &mut self.life.image);
                 Ok(())
             }
@@ -615,7 +631,8 @@ impl DemoApp {
                     self.particles.y.clone(),
                     self.particles.vx.clone(),
                     self.particles.vy.clone(),
-                )?;
+                )
+                .into_app_result()?;
                 self.particles.x = x;
                 self.particles.y = y;
                 self.particles.vx = vx;
@@ -628,7 +645,7 @@ impl DemoApp {
                 render_particles(&mut self.particles);
                 Ok(())
             }
-        };
+        })();
 
         match result {
             Ok(()) => {
@@ -650,7 +667,7 @@ impl DemoApp {
                     }
                 }
                 ui.separator();
-                ComboBox::from_id_source("backend")
+                ComboBox::from_id_salt("backend")
                     .selected_text(self.backend.name())
                     .show_ui(ui, |ui| {
                         for backend in BackendChoice::available() {
@@ -697,7 +714,7 @@ impl DemoApp {
             if ui.button("Reset").clicked() {
                 self.mandelbrot.reset();
             }
-            ComboBox::from_id_source("mandelbrot_iterations")
+            ComboBox::from_id_salt("mandelbrot_iterations")
                 .selected_text(self.mandelbrot.iterations.name())
                 .show_ui(ui, |ui| {
                     for preset in MandelbrotIterations::ALL {
@@ -713,7 +730,7 @@ impl DemoApp {
                         }
                     }
                 });
-            ComboBox::from_id_source("mandelbrot_colormap")
+            ComboBox::from_id_salt("mandelbrot_colormap")
                 .selected_text(self.mandelbrot.color_map.name())
                 .show_ui(ui, |ui| {
                     for color_map in ColorMap::ALL {
@@ -761,7 +778,7 @@ impl DemoApp {
             if ui.button("Reset").clicked() {
                 self.heat.reset();
             }
-            ComboBox::from_id_source("diffusion")
+            ComboBox::from_id_salt("diffusion")
                 .selected_text(self.heat.preset.name())
                 .show_ui(ui, |ui| {
                     for preset in DiffusionPreset::ALL {
@@ -791,7 +808,7 @@ impl DemoApp {
             if ui.button("Reset").clicked() {
                 self.wave.reset();
             }
-            ComboBox::from_id_source("wave")
+            ComboBox::from_id_salt("wave")
                 .selected_text(self.wave.preset.name())
                 .show_ui(ui, |ui| {
                     for preset in WavePreset::ALL {
@@ -827,7 +844,7 @@ impl DemoApp {
                 }
             }
             ui.checkbox(&mut self.particles.trails, "Trails");
-            ComboBox::from_id_source("particles")
+            ComboBox::from_id_salt("particles")
                 .selected_text(self.particles.preset.name())
                 .show_ui(ui, |ui| {
                     for preset in ParticlePreset::ALL {
@@ -1051,7 +1068,7 @@ fn render_particles(state: &mut ParticleState) {
     }
 }
 
-fn normalize_particles(state: &mut ParticleState) -> Result<()> {
+fn normalize_particles(state: &mut ParticleState) -> AppResult<()> {
     let mut x = state.x.clone().into_vec();
     let mut y = state.y.clone().into_vec();
     let mut vx = state.vx.clone().into_vec();
@@ -1074,10 +1091,10 @@ fn normalize_particles(state: &mut ParticleState) -> Result<()> {
         vx[i] = vx[i].clamp(-2.0, 2.0);
         vy[i] = vy[i].clamp(-2.0, 2.0);
     }
-    state.x = ParticleVec::from_vec(x)?;
-    state.y = ParticleVec::from_vec(y)?;
-    state.vx = ParticleVec::from_vec(vx)?;
-    state.vy = ParticleVec::from_vec(vy)?;
+    state.x = ParticleVec::from_vec(x).into_app_result()?;
+    state.y = ParticleVec::from_vec(y).into_app_result()?;
+    state.vx = ParticleVec::from_vec(vx).into_app_result()?;
+    state.vy = ParticleVec::from_vec(vy).into_app_result()?;
     Ok(())
 }
 

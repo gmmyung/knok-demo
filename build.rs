@@ -1,6 +1,6 @@
 use knok_build::prelude::*;
 
-const SIZE: usize = 512;
+const SIZE: usize = 1024;
 const PARTICLES: usize = 256;
 
 type Field = T2<f32, SIZE, SIZE>;
