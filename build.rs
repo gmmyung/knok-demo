@@ -48,6 +48,22 @@ fn wave_core(height: Field, velocity: Field, speed: f32, damping: f32) -> (Field
     (next_height, next_velocity)
 }
 
+fn life_core(field: Field) -> Field {
+    let up = roll(field.clone(), 0, 1);
+    let down = roll(field.clone(), 0, SIZE - 1);
+    let left = roll(field.clone(), 1, 1);
+    let right = roll(field.clone(), 1, SIZE - 1);
+    let up_left = roll(up.clone(), 1, 1);
+    let up_right = roll(up.clone(), 1, SIZE - 1);
+    let down_left = roll(down.clone(), 1, 1);
+    let down_right = roll(down.clone(), 1, SIZE - 1);
+    let neighbors = up + down + left + right + up_left + up_right + down_left + down_right;
+    let alive = greater(field, 0.5);
+    let survives = logical_and(alive, equal(neighbors.clone(), 2.0));
+    let born = equal(neighbors, 3.0);
+    r#where(logical_or(survives, born), 1.0, 0.0)
+}
+
 fn particles_core(
     x: Particles,
     y: Particles,
@@ -126,6 +142,11 @@ fn wave_fast_cpu(height: Field, velocity: Field) -> (Field, Field) {
 }
 
 #[knok_build::graph(backend = Backend::LlvmCpu)]
+fn life_cpu(field: Field) -> Field {
+    life_core(field)
+}
+
+#[knok_build::graph(backend = Backend::LlvmCpu)]
 fn particles_gentle_cpu(
     x: Particles,
     y: Particles,
@@ -195,6 +216,11 @@ mod vulkan_graphs {
     }
 
     #[knok_build::graph(backend = Backend::VulkanSpirv)]
+    fn life_vulkan(field: Field) -> Field {
+        life_core(field)
+    }
+
+    #[knok_build::graph(backend = Backend::VulkanSpirv)]
     fn particles_gentle_vulkan(
         x: Particles,
         y: Particles,
@@ -226,6 +252,7 @@ mod vulkan_graphs {
             wave_slow_vulkan,
             wave_medium_vulkan,
             wave_fast_vulkan,
+            life_vulkan,
             particles_gentle_vulkan,
             particles_strong_vulkan
         );
@@ -252,6 +279,11 @@ mod cuda_graphs {
     }
 
     #[knok_build::graph(backend = Backend::Cuda)]
+    fn life_cuda(field: Field) -> Field {
+        life_core(field)
+    }
+
+    #[knok_build::graph(backend = Backend::Cuda)]
     fn particles_gentle_cuda(
         x: Particles,
         y: Particles,
@@ -267,6 +299,7 @@ mod cuda_graphs {
             mandelbrot_48_cuda,
             heat_medium_cuda,
             wave_medium_cuda,
+            life_cuda,
             particles_gentle_cuda
         );
     }
@@ -292,6 +325,11 @@ mod metal_graphs {
     }
 
     #[knok_build::graph(backend = Backend::MetalSpirv)]
+    fn life_metal(field: Field) -> Field {
+        life_core(field)
+    }
+
+    #[knok_build::graph(backend = Backend::MetalSpirv)]
     fn particles_gentle_metal(
         x: Particles,
         y: Particles,
@@ -307,6 +345,7 @@ mod metal_graphs {
             mandelbrot_48_metal,
             heat_medium_metal,
             wave_medium_metal,
+            life_metal,
             particles_gentle_metal
         );
     }
@@ -324,6 +363,7 @@ fn main() {
         wave_slow_cpu,
         wave_medium_cpu,
         wave_fast_cpu,
+        life_cpu,
         particles_gentle_cpu,
         particles_strong_cpu
     );

@@ -15,6 +15,7 @@ The app builds `512x512` fixed-shape graph variants for:
 - Mandelbrot
 - Heat diffusion
 - Wave simulation
+- Conway's Game of Life
 - Particle interaction
 
 CPU is enabled by default. Optional backend builds:

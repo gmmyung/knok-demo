@@ -43,17 +43,25 @@ enum Tab {
     Mandelbrot,
     Heat,
     Wave,
+    Life,
     Particles,
 }
 
 impl Tab {
-    const ALL: [Self; 4] = [Self::Mandelbrot, Self::Heat, Self::Wave, Self::Particles];
+    const ALL: [Self; 5] = [
+        Self::Mandelbrot,
+        Self::Heat,
+        Self::Wave,
+        Self::Life,
+        Self::Particles,
+    ];
 
     fn name(self) -> &'static str {
         match self {
             Self::Mandelbrot => "Mandelbrot",
             Self::Heat => "Heat",
             Self::Wave => "Wave",
+            Self::Life => "Life",
             Self::Particles => "Particles",
         }
     }
@@ -397,6 +405,43 @@ struct ParticleState {
     image: Vec<u8>,
 }
 
+struct LifeState {
+    field: Field,
+    running: bool,
+    image: Vec<u8>,
+}
+
+impl LifeState {
+    fn new() -> Self {
+        let mut state = Self {
+            field: Field::filled(0.0),
+            running: true,
+            image: vec![0; SIZE * SIZE * 4],
+        };
+        state.reset();
+        state
+    }
+
+    fn reset(&mut self) {
+        let data = self.field.as_mut_slice();
+        data.fill(0.0);
+        for y in 0..SIZE {
+            for x in 0..SIZE {
+                let hash = (x * 73 + y * 151 + x * y * 17) % 997;
+                if hash < 118 {
+                    data[y * SIZE + x] = 1.0;
+                }
+            }
+        }
+        stamp_life_cells(data, 64, 64, 2, 1.0);
+        stamp_life_cells(data, SIZE / 2, SIZE / 2, 3, 1.0);
+    }
+
+    fn clear(&mut self) {
+        self.field.as_mut_slice().fill(0.0);
+    }
+}
+
 impl ParticleState {
     fn new() -> Result<Self> {
         let mut state = Self {
@@ -465,6 +510,7 @@ struct DemoApp {
     mandelbrot: MandelbrotState,
     heat: HeatState,
     wave: WaveState,
+    life: LifeState,
     particles: ParticleState,
     texture: Option<TextureHandle>,
     hud: Hud,
@@ -480,6 +526,7 @@ impl DemoApp {
             mandelbrot: MandelbrotState::new(),
             heat: HeatState::new().expect("initial heat state is valid"),
             wave: WaveState::new(),
+            life: LifeState::new(),
             particles: ParticleState::new().expect("initial particle state is valid"),
             texture: None,
             hud: Hud::new(),
@@ -548,6 +595,15 @@ impl DemoApp {
             }
             Tab::Wave => {
                 render_signed_field(self.wave.height.as_slice(), &mut self.wave.image);
+                Ok(())
+            }
+            Tab::Life if self.life.running => {
+                self.life.field = run_life(self.backend, engine, self.life.field.clone())?;
+                render_life(self.life.field.as_slice(), &mut self.life.image);
+                Ok(())
+            }
+            Tab::Life => {
+                render_life(self.life.field.as_slice(), &mut self.life.image);
                 Ok(())
             }
             Tab::Particles if self.particles.running => {
@@ -631,6 +687,7 @@ impl DemoApp {
             Tab::Mandelbrot => self.mandelbrot_ui(ui),
             Tab::Heat => self.heat_ui(ui),
             Tab::Wave => self.wave_ui(ui),
+            Tab::Life => self.life_ui(ui),
             Tab::Particles => self.particles_ui(ui),
         });
     }
@@ -781,6 +838,37 @@ impl DemoApp {
 
         show_texture(ui, &mut self.texture, &self.particles.image);
     }
+
+    fn life_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui
+                .button(if self.life.running { "Pause" } else { "Play" })
+                .clicked()
+            {
+                self.life.running = !self.life.running;
+            }
+            if ui.button("Reset").clicked() {
+                self.life.reset();
+            }
+            if ui.button("Clear").clicked() {
+                self.life.clear();
+            }
+        });
+
+        let response = show_texture(ui, &mut self.texture, &self.life.image);
+        if response.dragged() || response.clicked() {
+            if let Some((x, y)) = pointer_pixel(&response) {
+                let erase = ui.input(|input| input.pointer.secondary_down());
+                stamp_life_cells(
+                    self.life.field.as_mut_slice(),
+                    x,
+                    y,
+                    4,
+                    if erase { 0.0 } else { 1.0 },
+                );
+            }
+        }
+    }
 }
 
 impl eframe::App for DemoApp {
@@ -804,7 +892,9 @@ impl eframe::App for DemoApp {
         self.central_panel(ctx);
         self.hud.frame_ms = frame_start.elapsed().as_secs_f32() * 1000.0;
 
-        if matches!(self.tab, Tab::Heat | Tab::Wave | Tab::Particles) || self.mandelbrot.dirty {
+        if matches!(self.tab, Tab::Heat | Tab::Wave | Tab::Life | Tab::Particles)
+            || self.mandelbrot.dirty
+        {
             ctx.request_repaint();
         }
     }
@@ -858,10 +948,38 @@ fn stamp_disc(field: &mut [f32], center_x: usize, center_y: usize, radius: usize
     }
 }
 
+fn stamp_life_cells(
+    field: &mut [f32],
+    center_x: usize,
+    center_y: usize,
+    radius: usize,
+    value: f32,
+) {
+    let min_y = center_y.saturating_sub(radius);
+    let max_y = (center_y + radius).min(SIZE - 1);
+    let min_x = center_x.saturating_sub(radius);
+    let max_x = (center_x + radius).min(SIZE - 1);
+    for y in min_y..=max_y {
+        for x in min_x..=max_x {
+            field[y * SIZE + x] = value;
+        }
+    }
+}
+
 fn render_field(values: &[f32], map: ColorMap, image: &mut [u8]) {
     for (value, px) in values.iter().zip(image.chunks_exact_mut(4)) {
         let [r, g, b] = color_map(value.clamp(0.0, 1.0), map);
         px.copy_from_slice(&[r, g, b, 255]);
+    }
+}
+
+fn render_life(values: &[f32], image: &mut [u8]) {
+    for (value, px) in values.iter().zip(image.chunks_exact_mut(4)) {
+        if *value > 0.5 {
+            px.copy_from_slice(&[218, 238, 174, 255]);
+        } else {
+            px.copy_from_slice(&[9, 12, 16, 255]);
+        }
     }
 }
 
@@ -1037,6 +1155,18 @@ fn run_wave(
         BackendChoice::Cuda => cuda_graphs::wave_medium_cuda::run(engine, height, velocity),
         #[cfg(target_os = "macos")]
         BackendChoice::Metal => metal_graphs::wave_medium_metal::run(engine, height, velocity),
+    }
+}
+
+fn run_life(backend: BackendChoice, engine: &Engine, field: Field) -> knok::Result<Field> {
+    match backend {
+        BackendChoice::Cpu => cpu_graphs::life_cpu::run(engine, field),
+        #[cfg(feature = "vulkan")]
+        BackendChoice::Vulkan => vulkan_graphs::life_vulkan::run(engine, field),
+        #[cfg(feature = "cuda")]
+        BackendChoice::Cuda => cuda_graphs::life_cuda::run(engine, field),
+        #[cfg(target_os = "macos")]
+        BackendChoice::Metal => metal_graphs::life_metal::run(engine, field),
     }
 }
 
