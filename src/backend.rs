@@ -3,6 +3,7 @@ use knok::{Backend, Engine};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum BackendChoice {
     Cpu,
+    Ndarray,
     #[cfg(feature = "vulkan")]
     Vulkan,
     #[cfg(feature = "cuda")]
@@ -13,7 +14,7 @@ pub(crate) enum BackendChoice {
 
 impl BackendChoice {
     pub(crate) fn available() -> Vec<Self> {
-        let mut backends = vec![Self::Cpu];
+        let mut backends = vec![Self::Cpu, Self::Ndarray];
         #[cfg(feature = "vulkan")]
         backends.push(Self::Vulkan);
         #[cfg(feature = "cuda")]
@@ -25,19 +26,21 @@ impl BackendChoice {
 
     pub(crate) fn name(self) -> &'static str {
         match self {
-            Self::Cpu => "CPU",
+            Self::Cpu => "knok CPU",
+            Self::Ndarray => "Ndarray CPU",
             #[cfg(feature = "vulkan")]
-            Self::Vulkan => "Vulkan",
+            Self::Vulkan => "knok Vulkan",
             #[cfg(feature = "cuda")]
-            Self::Cuda => "CUDA",
+            Self::Cuda => "knok CUDA",
             #[cfg(target_os = "macos")]
-            Self::Metal => "Metal",
+            Self::Metal => "knok Metal",
         }
     }
 
     pub(crate) fn driver(self) -> &'static str {
         match self {
             Self::Cpu => "local-task",
+            Self::Ndarray => "ndarray",
             #[cfg(feature = "vulkan")]
             Self::Vulkan => "vulkan",
             #[cfg(feature = "cuda")]
@@ -47,9 +50,14 @@ impl BackendChoice {
         }
     }
 
+    pub(crate) fn uses_knok_engine(self) -> bool {
+        !matches!(self, Self::Ndarray)
+    }
+
     fn backend(self) -> Backend {
         match self {
             Self::Cpu => Backend::LlvmCpu,
+            Self::Ndarray => unreachable!("ndarray backend has no knok backend"),
             #[cfg(feature = "vulkan")]
             Self::Vulkan => Backend::VulkanSpirv,
             #[cfg(feature = "cuda")]
@@ -117,6 +125,7 @@ impl EngineCache {
     pub(crate) fn get(&mut self, backend: BackendChoice) -> std::result::Result<&Engine, String> {
         match backend {
             BackendChoice::Cpu => self.cpu.get(backend.backend()),
+            BackendChoice::Ndarray => unreachable!("ndarray backend has no knok engine"),
             #[cfg(feature = "vulkan")]
             BackendChoice::Vulkan => self.vulkan.get(backend.backend()),
             #[cfg(feature = "cuda")]

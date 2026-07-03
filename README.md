@@ -28,7 +28,7 @@ The app builds `1024x1024` fixed-shape graph variants for:
 | --- | --- |
 | ![Conway's Game of Life running on CPU](assets/screenshots/life-metal.png) | ![Particle interaction running on CPU](assets/screenshots/particles-metal.png) |
 
-CPU is enabled by default. Optional backend builds:
+The `knok CPU` and `Ndarray CPU` backends are enabled by default. `knok CPU` runs the compiled `knok` graph backend, while `Ndarray CPU` is a plain Rust CPU baseline for comparison. The HUD compute time includes the app's tensor/array conversion path. Optional backend builds:
 
 ```sh
 cargo run --features vulkan

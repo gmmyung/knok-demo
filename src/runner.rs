@@ -29,6 +29,7 @@ pub(crate) fn run_mandelbrot(
             MandelbrotIterations::Medium => cpu_graphs::mandelbrot_48_cpu::run(engine, x, y),
             MandelbrotIterations::High => cpu_graphs::mandelbrot_72_cpu::run(engine, x, y),
         },
+        BackendChoice::Ndarray => unreachable!("ndarray backend is handled by ndarray_runner"),
         #[cfg(feature = "vulkan")]
         BackendChoice::Vulkan => match preset {
             MandelbrotIterations::Low => vulkan_graphs::mandelbrot_24_vulkan::run(engine, x, y),
@@ -36,9 +37,17 @@ pub(crate) fn run_mandelbrot(
             MandelbrotIterations::High => vulkan_graphs::mandelbrot_72_vulkan::run(engine, x, y),
         },
         #[cfg(feature = "cuda")]
-        BackendChoice::Cuda => cuda_graphs::mandelbrot_48_cuda::run(engine, x, y),
+        BackendChoice::Cuda => match preset {
+            MandelbrotIterations::Low => cuda_graphs::mandelbrot_24_cuda::run(engine, x, y),
+            MandelbrotIterations::Medium => cuda_graphs::mandelbrot_48_cuda::run(engine, x, y),
+            MandelbrotIterations::High => cuda_graphs::mandelbrot_72_cuda::run(engine, x, y),
+        },
         #[cfg(target_os = "macos")]
-        BackendChoice::Metal => metal_graphs::mandelbrot_48_metal::run(engine, x, y),
+        BackendChoice::Metal => match preset {
+            MandelbrotIterations::Low => metal_graphs::mandelbrot_24_metal::run(engine, x, y),
+            MandelbrotIterations::Medium => metal_graphs::mandelbrot_48_metal::run(engine, x, y),
+            MandelbrotIterations::High => metal_graphs::mandelbrot_72_metal::run(engine, x, y),
+        },
     }
 }
 
@@ -54,6 +63,7 @@ pub(crate) fn run_heat(
             DiffusionPreset::Medium => cpu_graphs::heat_medium_cpu::run(engine, field),
             DiffusionPreset::High => cpu_graphs::heat_high_cpu::run(engine, field),
         },
+        BackendChoice::Ndarray => unreachable!("ndarray backend is handled by ndarray_runner"),
         #[cfg(feature = "vulkan")]
         BackendChoice::Vulkan => match preset {
             DiffusionPreset::Low => vulkan_graphs::heat_low_vulkan::run(engine, field),
@@ -80,6 +90,7 @@ pub(crate) fn run_wave(
             WavePreset::Medium => cpu_graphs::wave_medium_cpu::run(engine, height, velocity),
             WavePreset::Fast => cpu_graphs::wave_fast_cpu::run(engine, height, velocity),
         },
+        BackendChoice::Ndarray => unreachable!("ndarray backend is handled by ndarray_runner"),
         #[cfg(feature = "vulkan")]
         BackendChoice::Vulkan => match preset {
             WavePreset::Slow => vulkan_graphs::wave_slow_vulkan::run(engine, height, velocity),
@@ -100,6 +111,7 @@ pub(crate) fn run_life(
 ) -> knok::Result<Field> {
     match backend {
         BackendChoice::Cpu => cpu_graphs::life_cpu::run(engine, field),
+        BackendChoice::Ndarray => unreachable!("ndarray backend is handled by ndarray_runner"),
         #[cfg(feature = "vulkan")]
         BackendChoice::Vulkan => vulkan_graphs::life_vulkan::run(engine, field),
         #[cfg(feature = "cuda")]
@@ -123,6 +135,7 @@ pub(crate) fn run_particles(
             ParticlePreset::Gentle => cpu_graphs::particles_gentle_cpu::run(engine, x, y, vx, vy),
             ParticlePreset::Strong => cpu_graphs::particles_strong_cpu::run(engine, x, y, vx, vy),
         },
+        BackendChoice::Ndarray => unreachable!("ndarray backend is handled by ndarray_runner"),
         #[cfg(feature = "vulkan")]
         BackendChoice::Vulkan => match preset {
             ParticlePreset::Gentle => {

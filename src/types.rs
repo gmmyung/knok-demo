@@ -1,7 +1,7 @@
 use knok::tensor::{Tensor1, Tensor2};
 
 pub(crate) const SIZE: usize = 1024;
-pub(crate) const PARTICLES: usize = 256;
+pub(crate) const PARTICLES: usize = 1024;
 
 pub(crate) type Field = Tensor2<f32, SIZE, SIZE>;
 pub(crate) type ParticleVec = Tensor1<f32, PARTICLES>;

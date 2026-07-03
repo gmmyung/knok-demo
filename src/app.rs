@@ -5,6 +5,7 @@ use eframe::egui::{self, ComboBox, Context, TextureHandle};
 use crate::{
     backend::{BackendChoice, EngineCache},
     field_ops::{stamp_disc, stamp_life_cells},
+    ndarray_runner,
     presets::{ColorMap, DiffusionPreset, MandelbrotIterations, ParticlePreset, Tab, WavePreset},
     render::{
         pointer_pixel, render_field, render_life, render_particles, render_signed_field,
@@ -47,6 +48,11 @@ impl DemoApp {
     }
 
     fn step(&mut self) {
+        if !self.backend.uses_knok_engine() {
+            self.step_ndarray();
+            return;
+        }
+
         let engine = match self.engines.get(self.backend) {
             Ok(engine) => engine,
             Err(error) => {
@@ -157,6 +163,96 @@ impl DemoApp {
         }
     }
 
+    fn step_ndarray(&mut self) {
+        let graph_start = Instant::now();
+        let result: AppResult<()> = (|| match self.tab {
+            Tab::Mandelbrot if self.mandelbrot.dirty => {
+                let (x, y) = self.mandelbrot.grids()?;
+                let output = ndarray_runner::run_mandelbrot(self.mandelbrot.iterations, x, y)?;
+                render_field(
+                    output.as_slice(),
+                    self.mandelbrot.color_map,
+                    &mut self.mandelbrot.image,
+                );
+                self.mandelbrot.dirty = false;
+                Ok(())
+            }
+            Tab::Mandelbrot => Ok(()),
+            Tab::Heat if self.heat.running => {
+                self.heat.field =
+                    ndarray_runner::run_heat(self.heat.preset, self.heat.field.clone())?;
+                render_field(
+                    self.heat.field.as_slice(),
+                    ColorMap::Fire,
+                    &mut self.heat.image,
+                );
+                Ok(())
+            }
+            Tab::Heat => {
+                render_field(
+                    self.heat.field.as_slice(),
+                    ColorMap::Fire,
+                    &mut self.heat.image,
+                );
+                Ok(())
+            }
+            Tab::Wave if self.wave.running => {
+                let (height, velocity) = ndarray_runner::run_wave(
+                    self.wave.preset,
+                    self.wave.height.clone(),
+                    self.wave.velocity.clone(),
+                )?;
+                self.wave.height = height;
+                self.wave.velocity = velocity;
+                render_signed_field(self.wave.height.as_slice(), &mut self.wave.image);
+                Ok(())
+            }
+            Tab::Wave => {
+                render_signed_field(self.wave.height.as_slice(), &mut self.wave.image);
+                Ok(())
+            }
+            Tab::Life if self.life.running => {
+                self.life.field = ndarray_runner::run_life(self.life.field.clone())?;
+                render_life(self.life.field.as_slice(), &mut self.life.image);
+                Ok(())
+            }
+            Tab::Life => {
+                render_life(self.life.field.as_slice(), &mut self.life.image);
+                Ok(())
+            }
+            Tab::Particles if self.particles.running => {
+                let (x, y, vx, vy) = ndarray_runner::run_particles(
+                    self.particles.preset,
+                    self.particles.x.clone(),
+                    self.particles.y.clone(),
+                    self.particles.vx.clone(),
+                    self.particles.vy.clone(),
+                )?;
+                self.particles.x = x;
+                self.particles.y = y;
+                self.particles.vx = vx;
+                self.particles.vy = vy;
+                self.particles.normalize()?;
+                render_particles(&mut self.particles);
+                Ok(())
+            }
+            Tab::Particles => {
+                render_particles(&mut self.particles);
+                Ok(())
+            }
+        })();
+
+        match result {
+            Ok(()) => {
+                self.hud.graph_ms = graph_start.elapsed().as_secs_f32() * 1000.0;
+                self.hud.error = None;
+            }
+            Err(error) => {
+                self.hud.error = Some(error.to_string());
+            }
+        }
+    }
+
     fn top_bar(&mut self, ctx: &Context) {
         egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -170,7 +266,12 @@ impl DemoApp {
                     .selected_text(self.backend.name())
                     .show_ui(ui, |ui| {
                         for backend in BackendChoice::available() {
-                            ui.selectable_value(&mut self.backend, backend, backend.name());
+                            if ui
+                                .selectable_value(&mut self.backend, backend, backend.name())
+                                .clicked()
+                            {
+                                self.mandelbrot.dirty = true;
+                            }
                         }
                     });
             });
@@ -179,7 +280,7 @@ impl DemoApp {
 
     fn hud_overlay(&self, ui: &egui::Ui, response: &egui::Response) {
         let text = format!(
-            "Demo: {}\nBackend: {}\nDriver: {}\nFPS: {:.1}\nGraph: {:.2} ms\nFrame: {:.2} ms\nResolution: {}x{}",
+            "Demo: {}\nBackend: {}\nDriver: {}\nFPS: {:.1}\nCompute: {:.2} ms\nFrame: {:.2} ms\nResolution: {}x{}",
             self.tab.name(),
             self.backend.name(),
             self.backend.driver(),

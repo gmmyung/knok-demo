@@ -1,7 +1,7 @@
 use knok_build::prelude::*;
 
 const SIZE: usize = 1024;
-const PARTICLES: usize = 256;
+const PARTICLES: usize = 1024;
 
 type Field = T2<f32, SIZE, SIZE>;
 type Particles = T1<f32, PARTICLES>;
@@ -264,8 +264,18 @@ mod cuda_graphs {
     use super::*;
 
     #[knok_build::graph(backend = Backend::Cuda)]
+    fn mandelbrot_24_cuda(x: Field, y: Field) -> Field {
+        mandelbrot_core::<24>(x, y)
+    }
+
+    #[knok_build::graph(backend = Backend::Cuda)]
     fn mandelbrot_48_cuda(x: Field, y: Field) -> Field {
         mandelbrot_core::<48>(x, y)
+    }
+
+    #[knok_build::graph(backend = Backend::Cuda)]
+    fn mandelbrot_72_cuda(x: Field, y: Field) -> Field {
+        mandelbrot_core::<72>(x, y)
     }
 
     #[knok_build::graph(backend = Backend::Cuda)]
@@ -296,7 +306,9 @@ mod cuda_graphs {
     pub fn compile() {
         knok_build::compile_graphs_with_options!(
             BuildOptions::default().output_file("knok_cuda_graphs.rs");
+            mandelbrot_24_cuda,
             mandelbrot_48_cuda,
+            mandelbrot_72_cuda,
             heat_medium_cuda,
             wave_medium_cuda,
             life_cuda,
@@ -310,8 +322,18 @@ mod metal_graphs {
     use super::*;
 
     #[knok_build::graph(backend = Backend::MetalSpirv)]
+    fn mandelbrot_24_metal(x: Field, y: Field) -> Field {
+        mandelbrot_core::<24>(x, y)
+    }
+
+    #[knok_build::graph(backend = Backend::MetalSpirv)]
     fn mandelbrot_48_metal(x: Field, y: Field) -> Field {
         mandelbrot_core::<48>(x, y)
+    }
+
+    #[knok_build::graph(backend = Backend::MetalSpirv)]
+    fn mandelbrot_72_metal(x: Field, y: Field) -> Field {
+        mandelbrot_core::<72>(x, y)
     }
 
     #[knok_build::graph(backend = Backend::MetalSpirv)]
@@ -342,7 +364,9 @@ mod metal_graphs {
     pub fn compile() {
         knok_build::compile_graphs_with_options!(
             BuildOptions::default().output_file("knok_metal_graphs.rs");
+            mandelbrot_24_metal,
             mandelbrot_48_metal,
+            mandelbrot_72_metal,
             heat_medium_metal,
             wave_medium_metal,
             life_metal,

@@ -1,6 +1,7 @@
 mod app;
 mod backend;
 mod field_ops;
+mod ndarray_runner;
 mod presets;
 mod render;
 mod runner;
